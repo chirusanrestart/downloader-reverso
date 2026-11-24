@@ -43,13 +43,7 @@ Mantenha o processo ativo no Termux. O agente usa arquivos temporários e os rem
 
 ## Configuração dos servidores
 
-No Hostless do `melissa-iptv`, configure `API_KEY` com o mesmo valor usado na API principal.
-
-Na Melissa Downloader API, configure apenas:
-
-- `REVERSE_AGENT_URL=https://melissa-iptv.hostless.app/reverse-download`
-
-A `API_KEY` já existente é reutilizada. Não crie um segundo token.
+Na Melissa Downloader API, configure a `API_KEY` normalmente. O próprio servidor hospeda a fila do downloader reverso e usa essa mesma chave para autenticar o agente Termux. Não é necessário configurar o Hostless do IPTV nem criar um segundo token.
 
 Não publique o `.env` nem coloque o segredo no GitHub.
 
