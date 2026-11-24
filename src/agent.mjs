@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
-const RELAY_URL = (process.env.RELAY_URL || 'https://melissa-api-server.hostless.app').replace(/\/+$/, '');
+const API_URL = (process.env.API_URL || 'https://melissa-api-server.hostless.app').replace(/\/+$/, '');
 const API_KEY = process.env.API_KEY || '';
 const POLL_INTERVAL_MS = 1500;
 const DOWNLOAD_TIMEOUT_MS = Number(process.env.DOWNLOAD_TIMEOUT_MS || 10 * 60 * 1000);
@@ -116,7 +116,7 @@ function encodedHeaders(headers) {
 }
 
 async function postTaskResponse(taskId, status, headers, body) {
-  const response = await fetch(RELAY_URL + '/download-agent/respond/' + taskId, {
+  const response = await fetch(API_URL + '/download-agent/respond/' + taskId, {
     method: 'POST',
     headers: {
       'x-api-key': API_KEY,
@@ -172,7 +172,7 @@ async function processTask(job) {
 }
 
 async function pollOnce() {
-  const response = await fetch(RELAY_URL + '/download-agent/poll', {
+  const response = await fetch(API_URL + '/download-agent/poll', {
     headers: { 'x-api-key': API_KEY },
     signal: AbortSignal.timeout(35000)
   });
@@ -185,7 +185,7 @@ async function main() {
   if (!API_KEY) {
     throw new Error('Configure API_KEY no .env usando a mesma chave da API principal');
   }
-  console.log('Downloader reverso conectado ao relay: ' + RELAY_URL);
+  console.log('Downloader reverso conectado ao relay: ' + API_URL);
   while (true) {
     try {
       const job = await pollOnce();
