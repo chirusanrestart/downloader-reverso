@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 const RELAY_URL = (process.env.RELAY_URL || 'https://melissa-iptv.hostless.app').replace(/\/+$/, '');
-const AGENT_TOKEN = process.env.AGENT_TOKEN || '';
+const API_KEY = process.env.API_KEY || '';
 const POLL_INTERVAL_MS = 1500;
 const DOWNLOAD_TIMEOUT_MS = Number(process.env.DOWNLOAD_TIMEOUT_MS || 10 * 60 * 1000);
 const MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024;
@@ -119,7 +119,7 @@ async function postTaskResponse(taskId, status, headers, body) {
   const response = await fetch(RELAY_URL + '/download-agent/respond/' + taskId, {
     method: 'POST',
     headers: {
-      'x-agent-token': AGENT_TOKEN,
+      'x-api-key': API_KEY,
       'x-upstream-status': String(status),
       'x-upstream-headers': encodedHeaders(headers),
       'content-type': headers['content-type'] || 'application/octet-stream'
@@ -182,8 +182,8 @@ async function pollOnce() {
 }
 
 async function main() {
-  if (!AGENT_TOKEN || AGENT_TOKEN.length < 32) {
-    throw new Error('Configure AGENT_TOKEN com pelo menos 32 caracteres no .env');
+  if (!API_KEY || API_KEY.length < 32) {
+    throw new Error('Configure API_KEY com pelo menos 32 caracteres no .env');
   }
   console.log('Downloader reverso conectado ao relay: ' + RELAY_URL);
   while (true) {
