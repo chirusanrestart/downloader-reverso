@@ -1,6 +1,6 @@
 # Downloader Reverso 🐢
 
-Agente Node.js para Termux que recebe tarefas do relay `melissa-iptv` e usa a conexão de internet do A10s para baixar vídeos ou áudios públicos do YouTube com `yt-dlp`. O arquivo é enviado de volta ao relay em fluxo binário; o Hostless não precisa baixar o conteúdo diretamente do YouTube.
+Agente Node.js para Termux que recebe tarefas diretamente da Melissa Downloader API e usa a conexão de internet do A10s para baixar vídeos ou áudios públicos do YouTube com `yt-dlp`. O arquivo é enviado de volta à própria API em fluxo binário; o Hostless não precisa baixar o conteúdo diretamente do YouTube.
 
 ## Fluxo
 
