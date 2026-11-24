@@ -173,7 +173,7 @@ async function processTask(job) {
 
 async function pollOnce() {
   const response = await fetch(RELAY_URL + '/download-agent/poll', {
-    headers: { 'x-agent-token': AGENT_TOKEN },
+    headers: { 'x-api-key': API_KEY },
     signal: AbortSignal.timeout(35000)
   });
   if (response.status === 204) return null;
