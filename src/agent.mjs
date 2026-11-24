@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
-const RELAY_URL = (process.env.RELAY_URL || 'https://melissa-iptv.hostless.app').replace(/\/+$/, '');
+const RELAY_URL = (process.env.RELAY_URL || 'https://melissa-api-server.hostless.app').replace(/\/+$/, '');
 const API_KEY = process.env.API_KEY || '';
 const POLL_INTERVAL_MS = 1500;
 const DOWNLOAD_TIMEOUT_MS = Number(process.env.DOWNLOAD_TIMEOUT_MS || 10 * 60 * 1000);
