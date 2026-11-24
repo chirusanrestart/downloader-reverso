@@ -4,11 +4,14 @@ import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import WebSocket from 'ws';
 
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
-const API_URL = (process.env.API_URL || 'https://melissa-api-server.hostless.app').replace(/\/+$/, '');
+const API_URL = (process.env.API_URL || 'https://melissa-api-server.hostless.app').replace(/\\/+$/, '');
 const API_KEY = process.env.API_KEY || '';
-const POLL_INTERVAL_MS = 1500;
+const RECONNECT_INITIAL_MS = 1500;
+const RECONNECT_MAX_MS = 30_000;
+const HEARTBEAT_INTERVAL_MS = 20_000;
 const DOWNLOAD_TIMEOUT_MS = Number(process.env.DOWNLOAD_TIMEOUT_MS || 10 * 60 * 1000);
 const MAX_DOWNLOAD_BYTES = 500 * 1024 * 1024;
 
@@ -16,6 +19,25 @@ const YOUTUBE_HOSTS = new Set([
   'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com',
   'youtu.be', 'www.youtu.be', 'youtube-nocookie.com', 'www.youtube-nocookie.com'
 ]);
+
+export function buildAgentSocketUrl(apiUrl) {
+  let endpoint;
+  try {
+    endpoint = new URL(apiUrl);
+  } catch {
+    throw new Error('API_URL deve ser uma URL HTTP ou HTTPS válida');
+  }
+  if (endpoint.protocol === 'https:') endpoint.protocol = 'wss:';
+  else if (endpoint.protocol === 'http:') endpoint.protocol = 'ws:';
+  else throw new Error('API_URL deve usar HTTP ou HTTPS');
+  if (endpoint.username || endpoint.password) {
+    throw new Error('API_URL não pode conter credenciais');
+  }
+  endpoint.pathname = '/download-agent/connect';
+  endpoint.search = '';
+  endpoint.hash = '';
+  return endpoint.toString();
+}
 
 export function parseDownloadTask(job) {
   if (!job || typeof job !== 'object' || job.method !== 'GET' || typeof job.path !== 'string') {
@@ -134,10 +156,11 @@ async function postTaskResponse(taskId, status, headers, body) {
 
 async function processTask(job) {
   let task;
-  try { task = parseDownloadTask(job); }
-  catch (error) {
-    console.warn('Tarefa ignorada:', error.message);
-    return false;
+  try {
+    task = parseDownloadTask(job);
+  } catch (error) {
+    console.warn('Tarefa reversa ignorada:', error.message);
+    return true;
   }
 
   const directory = await mkdtemp(join(tmpdir(), 'downloader-reverso-'));
@@ -152,48 +175,150 @@ async function processTask(job) {
     };
     await postTaskResponse(task.id, 200, headers, createReadStream(media.filePath));
     console.log('Download reverso concluído: ' + media.filename + ' (' + media.size + ' bytes)');
+    return true;
   } catch (error) {
     console.error('Download reverso falhou:', error.message);
     const body = Buffer.from(JSON.stringify({
       error: 'Falha no download reverso',
       details: String(error.message || '').slice(0, 800)
     }));
-    await postTaskResponse(task.id, 502, {
-      'content-type': 'application/json; charset=utf-8',
-      'content-length': String(body.length),
-      'cache-control': 'no-store'
-    }, body).catch(responseError => {
-      console.error('Não foi possível devolver o erro ao relay:', responseError.message);
-    });
+    try {
+      await postTaskResponse(task.id, 502, {
+        'content-type': 'application/json; charset=utf-8',
+        'content-length': String(body.length),
+        'cache-control': 'no-store'
+      }, body);
+      return true;
+    } catch (responseError) {
+      console.error('Não foi possível devolver a resposta ao relay:', responseError.message);
+      return false;
+    }
   } finally {
     await rm(directory, { recursive: true, force: true }).catch(() => {});
   }
-  return true;
 }
 
-async function pollOnce() {
-  const response = await fetch(API_URL + '/download-agent/poll', {
-    headers: { 'x-api-key': API_KEY },
-    signal: AbortSignal.timeout(35000)
+function parseSocketMessage(raw) {
+  try {
+    const message = JSON.parse(raw.toString());
+    return message && typeof message === 'object' ? message : null;
+  } catch {
+    return null;
+  }
+}
+
+function sendSocketMessage(socket, message) {
+  return new Promise((resolve, reject) => {
+    if (socket.readyState !== WebSocket.OPEN) {
+      reject(new Error('Conexão com a API não está aberta'));
+      return;
+    }
+    socket.send(JSON.stringify(message), error => {
+      if (error) reject(error);
+      else resolve();
+    });
   });
-  if (response.status === 204) return null;
-  if (!response.ok) throw new Error('Polling respondeu HTTP ' + response.status);
-  return response.json();
+}
+
+function openAgentSocket(socketUrl) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(socketUrl, {
+      headers: { 'x-api-key': API_KEY },
+      handshakeTimeout: 15_000,
+      perMessageDeflate: false
+    });
+    let opened = false;
+    socket.once('open', () => {
+      opened = true;
+      resolve(socket);
+    });
+    socket.on('error', error => {
+      if (!opened) reject(error);
+      else console.error('Conexão do agente apresentou erro:', error.message);
+    });
+  });
+}
+
+async function serveAgentSocket(socket) {
+  let taskActive = false;
+  let closing = false;
+
+  const heartbeat = setInterval(() => {
+    sendSocketMessage(socket, { type: 'heartbeat', timestamp: Date.now() })
+      .catch(error => {
+        console.error('Falha ao enviar heartbeat:', error.message);
+        socket.terminate();
+      });
+  }, HEARTBEAT_INTERVAL_MS);
+  heartbeat.unref();
+
+  const closed = new Promise(resolve => {
+    socket.once('close', () => resolve());
+  });
+
+  socket.on('message', raw => {
+    const message = parseSocketMessage(raw);
+    if (!message) return;
+
+    if (message.type === 'ready') {
+      console.log('Canal reverso autenticado; A10s está online.');
+      return;
+    }
+    if (message.type === 'heartbeat_ack') return;
+
+    if (message.type === 'task') {
+      if (taskActive || closing) return;
+      taskActive = true;
+      const job = message.job;
+      const taskId = job && typeof job.id === 'string' ? job.id : null;
+
+      processTask(job).then(async completed => {
+        if (!completed) {
+          socket.terminate();
+          return;
+        }
+        if (taskId) {
+          await sendSocketMessage(socket, { type: 'task_complete', id: taskId });
+        }
+      }).catch(error => {
+        console.error('Falha inesperada ao processar tarefa:', error.message);
+        socket.terminate();
+      }).finally(() => {
+        taskActive = false;
+      });
+    }
+  });
+
+  socket.on('error', error => {
+    console.error('Canal reverso apresentou erro:', error.message);
+  });
+
+  await closed;
+  closing = true;
+  clearInterval(heartbeat);
 }
 
 async function main() {
   if (!API_KEY) {
     throw new Error('Configure API_KEY no .env usando a mesma chave da API principal');
   }
-  console.log('Downloader reverso conectado à API: ' + API_URL);
+
+  const socketUrl = buildAgentSocketUrl(API_URL);
+  let reconnectDelay = RECONNECT_INITIAL_MS;
+  console.log('Downloader reverso aguardando chamadas da API: ' + socketUrl);
+
   while (true) {
     try {
-      const job = await pollOnce();
-      if (job) await processTask(job);
+      const socket = await openAgentSocket(socketUrl);
+      reconnectDelay = RECONNECT_INITIAL_MS;
+      await serveAgentSocket(socket);
+      console.warn('Canal reverso encerrado; tentando reconectar.');
     } catch (error) {
-      console.error('Falha no polling do relay:', error.message);
-      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
+      console.error('Falha ao conectar ao relay:', error.message);
     }
+
+    await new Promise(resolve => setTimeout(resolve, reconnectDelay));
+    reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
   }
 }
 
