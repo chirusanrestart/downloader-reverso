@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import WebSocket from 'ws';
 
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
-const API_URL = (process.env.API_URL || 'https://melissa-api-server.hostless.app').replace(/\\/+$/, '');
+const API_URL = new URL(process.env.API_URL || 'https://melissa-api-server.hostless.app').origin;
 const API_KEY = process.env.API_KEY || '';
 const RECONNECT_INITIAL_MS = 1500;
 const RECONNECT_MAX_MS = 30_000;
