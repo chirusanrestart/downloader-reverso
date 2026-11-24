@@ -46,13 +46,12 @@ export function parseDownloadTask(job) {
   return { id: job.id, url: mediaUrl.toString(), mode };
 }
 
-export function buildYtDlpArgs({ url, mode, outputPath, impersonate = false }) {
+export function buildYtDlpArgs({ url, mode, outputPath }) {
   const args = [
     '--no-playlist', '--no-warnings', '--no-progress',
     '--js-runtimes', 'node', '--remote-components', 'ejs:github',
     '--max-filesize', '500M'
   ];
-  if (impersonate) args.push('--impersonate', 'chrome');
   if (mode === 'audio') {
     args.push('-f', 'bestaudio/best', '--extract-audio', '--audio-format', 'm4a', '--audio-quality', '128K');
   } else {
@@ -95,12 +94,7 @@ function runYtDlp(args) {
 
 async function downloadMedia(task, directory) {
   const outputPath = join(directory, 'media.%(ext)s');
-  try {
-    await runYtDlp(buildYtDlpArgs({ url: task.url, mode: task.mode, outputPath }));
-  } catch (firstError) {
-    console.warn('yt-dlp falhou sem impersonação; tentando Chrome:', firstError.message);
-    await runYtDlp(buildYtDlpArgs({ url: task.url, mode: task.mode, outputPath, impersonate: true }));
-  }
+  await runYtDlp(buildYtDlpArgs({ url: task.url, mode: task.mode, outputPath }));
 
   const files = await readdir(directory);
   const filename = files.find(name => name.startsWith('media.') && !/\.(part|ytdl)$/i.test(name));
