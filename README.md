@@ -7,7 +7,7 @@ Agente Node.js para Termux que recebe tarefas diretamente da Melissa Downloader 
 1. A API principal esgota seus métodos normais de download.
 2. A API cria uma tarefa no endpoint autenticado `/reverse-download` hospedado nela mesma.
 3. A própria API coloca a tarefa em sua fila do downloader reverso.
-4. O agente no Termux recebe a tarefa por polling e executa `yt-dlp` no A10s.
+4. O agente no Termux mantém uma conexão WebSocket autenticada com a API e recebe a tarefa enviada pelo servidor assim que ela é criada; então executa `yt-dlp` no A10s.
 5. O agente envia o arquivo diretamente à API, que transmite os bytes ao cliente.
 
 A fila e os endpoints do downloader reverso pertencem exclusivamente à Melissa Downloader API. O servidor IPTV não participa desse fluxo.
@@ -53,5 +53,5 @@ Não publique o `.env` nem coloque o segredo no GitHub.
 - Modos suportados: `video` (MP4 combinado quando disponível) e `audio` (M4A/AAC).
 - Limite de arquivo: 500 MiB.
 - O agente executa yt-dlp sem impersonação, usando a conexão normal do Termux/A10s.
-- Os endpoints de tarefa, polling e resposta da API exigem a mesma `API_KEY` privada.
+- A conexão WebSocket do agente e o endpoint de resposta exigem a mesma `API_KEY` privada. O agente envia heartbeats pelo canal persistente e reconecta automaticamente quando a conexão cai.
 - Use somente conteúdo que você tenha autorização para baixar.
