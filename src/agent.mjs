@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import { createReadStream } from 'node:fs';
 import { mkdtemp, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 const RELAY_URL = (process.env.RELAY_URL || 'https://melissa-iptv.hostless.app').replace(/\/+$/, '');
@@ -202,7 +203,7 @@ async function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === new URL('file://' + process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch(error => {
     console.error(error.message);
     process.exitCode = 1;
