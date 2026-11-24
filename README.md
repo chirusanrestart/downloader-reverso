@@ -23,7 +23,7 @@ cd downloader-reverso
 cp .env.example .env
 ```
 
-Edite `.env` e informe a mesma `API_KEY` privada configurada na Melissa Downloader API e nos Secrets do Hostless relay. Ela deve ter pelo menos 32 caracteres.
+Edite `.env` e informe a mesma `API_KEY` privada configurada nos Secrets da Melissa Downloader API.
 
 ```bash
 npm test
