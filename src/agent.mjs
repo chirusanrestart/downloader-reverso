@@ -83,43 +83,74 @@ export function buildYtDlpArgs({ url, mode, outputPath }) {
   return args;
 }
 
-function runYtDlp(args) {
+export function runCommand(command, args, { timeoutMs = DOWNLOAD_TIMEOUT_MS, signal } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(YTDLP, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    if (signal && signal.aborted) {
+      reject(signal.reason instanceof Error ? signal.reason : new Error('Processo cancelado'));
+      return;
+    }
+
+    const child = spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     let settled = false;
+    let terminationError = null;
+    let killTimer = null;
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+      if (signal) signal.removeEventListener('abort', onAbort);
+    };
     const finish = error => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      cleanup();
       if (error) reject(error);
       else resolve();
     };
-    const timer = setTimeout(() => {
-      child.kill('SIGTERM');
-      const killTimer = setTimeout(() => {
+    const terminate = error => {
+      if (settled || terminationError) return;
+      terminationError = error;
+      if (child.exitCode === null) child.kill('SIGTERM');
+      killTimer = setTimeout(() => {
         if (child.exitCode === null) child.kill('SIGKILL');
       }, 2500);
       killTimer.unref();
-      finish(new Error('Tempo limite do yt-dlp excedido'));
-    }, DOWNLOAD_TIMEOUT_MS);
+    };
+    const onAbort = () => {
+      terminate(signal.reason instanceof Error ? signal.reason : new Error('Processo cancelado'));
+    };
+
+    const timer = setTimeout(() => {
+      terminate(new Error('Tempo limite do yt-dlp excedido'));
+    }, timeoutMs);
     timer.unref();
+
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', chunk => { stderr = (stderr + chunk).slice(-3000); });
     child.once('error', finish);
     child.once('close', code => {
+      if (terminationError) return finish(terminationError);
       if (code === 0) return finish();
-      finish(new Error(stderr.trim() || ('yt-dlp terminou com código ' + code)));
+      finish(new Error(stderr.trim() || (command + ' terminou com código ' + code)));
     });
+
+    if (signal) {
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
   });
 }
 
-async function downloadMedia(task, directory) {
+async function downloadMedia(task, directory, signal) {
   const outputPath = join(directory, 'media.%(ext)s');
-  await runYtDlp(buildYtDlpArgs({ url: task.url, mode: task.mode, outputPath }));
+  await runCommand(YTDLP, buildYtDlpArgs({ url: task.url, mode: task.mode, outputPath }), {
+    timeoutMs: DOWNLOAD_TIMEOUT_MS,
+    signal
+  });
 
   const files = await readdir(directory);
-  const filename = files.find(name => name.startsWith('media.') && !/\.(part|ytdl)$/i.test(name));
+  const filename = files.find(name => name.startsWith('media.') && !/\\.(part|ytdl)$/i.test(name));
   if (!filename) throw new Error('yt-dlp terminou sem gerar a mídia');
   const filePath = join(directory, filename);
   const info = await stat(filePath);
@@ -137,24 +168,43 @@ function encodedHeaders(headers) {
   return Buffer.from(JSON.stringify(headers)).toString('base64');
 }
 
-async function postTaskResponse(taskId, status, headers, body) {
-  const response = await fetch(API_URL + '/download-agent/respond/' + taskId, {
-    method: 'POST',
-    headers: {
-      'x-api-key': API_KEY,
-      'x-upstream-status': String(status),
-      'x-upstream-headers': encodedHeaders(headers),
-      'content-type': headers['content-type'] || 'application/octet-stream'
-    },
-    body,
-    duplex: 'half',
-    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS + 30000)
-  });
-  if (!response.ok) throw new Error('Relay recusou a resposta da tarefa: HTTP ' + response.status);
-  await response.arrayBuffer();
+async function postTaskResponse(taskId, status, headers, body, signal) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort(new Error('Tempo limite ao devolver a resposta ao relay'));
+  }, DOWNLOAD_TIMEOUT_MS + 30_000);
+  timeout.unref();
+
+  const onAbort = () => {
+    controller.abort(signal.reason instanceof Error ? signal.reason : new Error('Conexão com a API encerrada'));
+  };
+  if (signal) {
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  }
+
+  try {
+    const response = await fetch(API_URL + '/download-agent/respond/' + taskId, {
+      method: 'POST',
+      headers: {
+        'x-api-key': API_KEY,
+        'x-upstream-status': String(status),
+        'x-upstream-headers': encodedHeaders(headers),
+        'content-type': headers['content-type'] || 'application/octet-stream'
+      },
+      body,
+      duplex: 'half',
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error('Relay recusou a resposta da tarefa: HTTP ' + response.status);
+    await response.arrayBuffer();
+  } finally {
+    clearTimeout(timeout);
+    if (signal) signal.removeEventListener('abort', onAbort);
+  }
 }
 
-async function processTask(job) {
+async function processTask(job, signal) {
   let task;
   try {
     task = parseDownloadTask(job);
@@ -165,7 +215,7 @@ async function processTask(job) {
 
   const directory = await mkdtemp(join(tmpdir(), 'downloader-reverso-'));
   try {
-    const media = await downloadMedia(task, directory);
+    const media = await downloadMedia(task, directory, signal);
     const headers = {
       'content-type': media.contentType,
       'content-disposition': 'attachment; filename="' + media.filename + '"',
@@ -173,10 +223,14 @@ async function processTask(job) {
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff'
     };
-    await postTaskResponse(task.id, 200, headers, createReadStream(media.filePath));
+    await postTaskResponse(task.id, 200, headers, createReadStream(media.filePath), signal);
     console.log('Download reverso concluído: ' + media.filename + ' (' + media.size + ' bytes)');
     return true;
   } catch (error) {
+    if (signal && signal.aborted) {
+      console.warn('Download interrompido porque o canal com a API foi encerrado.');
+      return false;
+    }
     console.error('Download reverso falhou:', error.message);
     const body = Buffer.from(JSON.stringify({
       error: 'Falha no download reverso',
@@ -187,7 +241,7 @@ async function processTask(job) {
         'content-type': 'application/json; charset=utf-8',
         'content-length': String(body.length),
         'cache-control': 'no-store'
-      }, body);
+      }, body, signal);
       return true;
     } catch (responseError) {
       console.error('Não foi possível devolver a resposta ao relay:', responseError.message);
@@ -242,6 +296,8 @@ function openAgentSocket(socketUrl) {
 async function serveAgentSocket(socket) {
   let taskActive = false;
   let closing = false;
+  let activeTaskController = null;
+  let activeTaskPromise = null;
 
   const heartbeat = setInterval(() => {
     sendSocketMessage(socket, { type: 'heartbeat', timestamp: Date.now() })
@@ -253,7 +309,13 @@ async function serveAgentSocket(socket) {
   heartbeat.unref();
 
   const closed = new Promise(resolve => {
-    socket.once('close', () => resolve());
+    socket.once('close', () => {
+      closing = true;
+      if (activeTaskController && !activeTaskController.signal.aborted) {
+        activeTaskController.abort(new Error('Canal com a API encerrado'));
+      }
+      resolve();
+    });
   });
 
   socket.on('message', raw => {
@@ -267,12 +329,14 @@ async function serveAgentSocket(socket) {
     if (message.type === 'heartbeat_ack') return;
 
     if (message.type === 'task') {
-      if (taskActive || closing) return;
+      if (taskActive || closing || activeTaskPromise) return;
       taskActive = true;
       const job = message.job;
       const taskId = job && typeof job.id === 'string' ? job.id : null;
+      const taskController = new AbortController();
+      activeTaskController = taskController;
 
-      processTask(job).then(async completed => {
+      const taskPromise = processTask(job, taskController.signal).then(async completed => {
         if (!completed) {
           socket.terminate();
           return;
@@ -284,8 +348,11 @@ async function serveAgentSocket(socket) {
         console.error('Falha inesperada ao processar tarefa:', error.message);
         socket.terminate();
       }).finally(() => {
+        if (activeTaskController === taskController) activeTaskController = null;
         taskActive = false;
+        if (activeTaskPromise === taskPromise) activeTaskPromise = null;
       });
+      activeTaskPromise = taskPromise;
     }
   });
 
@@ -294,7 +361,10 @@ async function serveAgentSocket(socket) {
   });
 
   await closed;
-  closing = true;
+  if (activeTaskController && !activeTaskController.signal.aborted) {
+    activeTaskController.abort(new Error('Canal com a API encerrado'));
+  }
+  if (activeTaskPromise) await activeTaskPromise.catch(() => {});
   clearInterval(heartbeat);
 }
 
