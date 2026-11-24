@@ -37,7 +37,7 @@ Mantenha o processo ativo no Termux. O agente usa arquivos temporários e os rem
 | Variável | Uso |
 |---|---|
 | `API_KEY` | Chave privada compartilhada entre agente, relay e API |
-| `RELAY_URL` | Base da Melissa Downloader API, padrão `https://melissa-api-server.hostless.app` |
+| `API_URL` | URL base da Melissa Downloader API, padrão `https://melissa-api-server.hostless.app` |
 | `YTDLP_PATH` | Caminho opcional do executável yt-dlp |
 | `DOWNLOAD_TIMEOUT_MS` | Timeout do yt-dlp, padrão 600000 ms |
 
