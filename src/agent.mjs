@@ -182,8 +182,8 @@ async function pollOnce() {
 }
 
 async function main() {
-  if (!API_KEY || API_KEY.length < 32) {
-    throw new Error('Configure API_KEY com pelo menos 32 caracteres no .env');
+  if (!API_KEY) {
+    throw new Error('Configure API_KEY no .env usando a mesma chave da API principal');
   }
   console.log('Downloader reverso conectado ao relay: ' + RELAY_URL);
   while (true) {
