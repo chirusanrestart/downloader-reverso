@@ -185,7 +185,7 @@ async function main() {
   if (!API_KEY) {
     throw new Error('Configure API_KEY no .env usando a mesma chave da API principal');
   }
-  console.log('Downloader reverso conectado ao relay: ' + API_URL);
+  console.log('Downloader reverso conectado à API: ' + API_URL);
   while (true) {
     try {
       const job = await pollOnce();
