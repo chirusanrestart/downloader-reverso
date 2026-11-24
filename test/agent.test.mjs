@@ -32,4 +32,6 @@ test('builds separate yt-dlp output arguments for video and M4A audio', () => {
   assert.ok(audio.includes('bestaudio/best'));
   assert.ok(audio.includes('--extract-audio'));
   assert.ok(audio.includes('m4a'));
+  assert.ok(!video.includes('--impersonate'));
+  assert.ok(!audio.includes('--impersonate'));
 });
