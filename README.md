@@ -23,7 +23,7 @@ cd downloader-reverso
 cp .env.example .env
 ```
 
-Edite `.env` e informe o mesmo segredo aleatório de pelo menos 32 caracteres configurado no Hostless do relay e na API principal.
+Edite `.env` e informe a mesma `API_KEY` privada configurada na Melissa Downloader API e nos Secrets do Hostless relay. Ela deve ter pelo menos 32 caracteres.
 
 ```bash
 npm test
@@ -36,19 +36,20 @@ Mantenha o processo ativo no Termux. O agente usa arquivos temporários e os rem
 
 | Variável | Uso |
 |---|---|
-| `AGENT_TOKEN` | Segredo compartilhado entre agente, relay e API |
+| `API_KEY` | Chave privada compartilhada entre agente, relay e API |
 | `RELAY_URL` | Base do relay, padrão `https://melissa-iptv.hostless.app` |
 | `YTDLP_PATH` | Caminho opcional do executável yt-dlp |
 | `DOWNLOAD_TIMEOUT_MS` | Timeout do yt-dlp, padrão 600000 ms |
 
 ## Configuração dos servidores
 
-No Hostless do `melissa-iptv`, configure `REVERSE_AGENT_TOKEN` com o segredo compartilhado.
+No Hostless do `melissa-iptv`, configure `API_KEY` com o mesmo valor usado na API principal.
 
-Na Melissa Downloader API, configure:
+Na Melissa Downloader API, configure apenas:
 
 - `REVERSE_AGENT_URL=https://melissa-iptv.hostless.app/reverse-download`
-- `REVERSE_AGENT_TOKEN` com o mesmo segredo.
+
+A `API_KEY` já existente é reutilizada. Não crie um segundo token.
 
 Não publique o `.env` nem coloque o segredo no GitHub.
 
@@ -58,5 +59,5 @@ Não publique o `.env` nem coloque o segredo no GitHub.
 - Modos suportados: `video` (MP4 combinado quando disponível) e `audio` (M4A/AAC).
 - Limite de arquivo: 500 MiB.
 - O agente executa yt-dlp sem impersonação, usando a conexão normal do Termux/A10s.
-- O endpoint do relay e o polling do agente exigem o segredo compartilhado.
+- O endpoint do relay e o polling do agente exigem a mesma `API_KEY` privada.
 - Use somente conteúdo que você tenha autorização para baixar.
