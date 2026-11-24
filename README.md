@@ -5,12 +5,12 @@ Agente Node.js para Termux que recebe tarefas diretamente da Melissa Downloader 
 ## Fluxo
 
 1. A API principal esgota seus métodos normais de download.
-2. A API chama o endpoint autenticado `/reverse-download` do relay.
-3. O relay coloca a tarefa em uma fila própria do downloader reverso.
+2. A API cria uma tarefa no endpoint autenticado `/reverse-download` hospedado nela mesma.
+3. A própria API coloca a tarefa em sua fila do downloader reverso.
 4. O agente no Termux recebe a tarefa por polling e executa `yt-dlp` no A10s.
-5. O agente envia o arquivo ao relay, que transmite os bytes de volta à API principal.
+5. O agente envia o arquivo diretamente à API, que transmite os bytes ao cliente.
 
-O canal usa o mecanismo de polling já existente no relay, mas tem fila e endpoints separados das tarefas IPTV para não consumir requisições do player.
+A fila e os endpoints do downloader reverso pertencem exclusivamente à Melissa Downloader API. O servidor IPTV não participa desse fluxo.
 
 ## Requisitos no Termux
 
@@ -36,7 +36,7 @@ Mantenha o processo ativo no Termux. O agente usa arquivos temporários e os rem
 
 | Variável | Uso |
 |---|---|
-| `API_KEY` | Chave privada compartilhada entre agente, relay e API |
+| `API_KEY` | Mesma chave privada configurada na Melissa Downloader API |
 | `API_URL` | URL base da Melissa Downloader API, padrão `https://melissa-api-server.hostless.app` |
 | `YTDLP_PATH` | Caminho opcional do executável yt-dlp |
 | `DOWNLOAD_TIMEOUT_MS` | Timeout do yt-dlp, padrão 600000 ms |
@@ -53,5 +53,5 @@ Não publique o `.env` nem coloque o segredo no GitHub.
 - Modos suportados: `video` (MP4 combinado quando disponível) e `audio` (M4A/AAC).
 - Limite de arquivo: 500 MiB.
 - O agente executa yt-dlp sem impersonação, usando a conexão normal do Termux/A10s.
-- O endpoint do relay e o polling do agente exigem a mesma `API_KEY` privada.
+- Os endpoints de tarefa, polling e resposta da API exigem a mesma `API_KEY` privada.
 - Use somente conteúdo que você tenha autorização para baixar.
