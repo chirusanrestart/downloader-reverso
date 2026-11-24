@@ -1,6 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDownloadTask, buildYtDlpArgs } from '../src/agent.mjs';
+import { parseDownloadTask, buildYtDlpArgs, buildAgentSocketUrl, runCommand } from '../src/agent.mjs';
+
+test('builds a secure WebSocket endpoint from the public API address', () => {
+  assert.equal(
+    buildAgentSocketUrl('https://melissa-api-server.hostless.app'),
+    'wss://melissa-api-server.hostless.app/download-agent/connect'
+  );
+});
+
+test('keeps local HTTP API addresses usable for development', () => {
+  assert.equal(
+    buildAgentSocketUrl('http://127.0.0.1:8000/'),
+    'ws://127.0.0.1:8000/download-agent/connect'
+  );
+});
+
+test('rejects unsupported API URL protocols', () => {
+  assert.throws(() => buildAgentSocketUrl('ftp://example.com'), /HTTP/);
+});
 
 test('accepts only reverse-download tasks with a supported YouTube URL', () => {
   const task = parseDownloadTask({
@@ -34,4 +52,16 @@ test('builds separate yt-dlp output arguments for video and M4A audio', () => {
   assert.ok(audio.includes('m4a'));
   assert.ok(!video.includes('--impersonate'));
   assert.ok(!audio.includes('--impersonate'));
+});
+
+test('stops an active downloader subprocess when the socket aborts its task', async () => {
+  const controller = new AbortController();
+  const running = runCommand(
+    process.execPath,
+    ['-e', 'setTimeout(() => {}, 10000)'],
+    { timeoutMs: 15000, signal: controller.signal }
+  );
+
+  setTimeout(() => controller.abort(new Error('connection closed')), 100);
+  await assert.rejects(running, /connection closed/);
 });
