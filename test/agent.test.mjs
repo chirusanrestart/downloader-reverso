@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDownloadTask, buildYtDlpArgs, buildAgentSocketUrl } from '../src/agent.mjs';
+import { parseDownloadTask, buildYtDlpArgs, buildAgentSocketUrl, runCommand } from '../src/agent.mjs';
 
 test('builds a secure WebSocket endpoint from the public API address', () => {
   assert.equal(
@@ -52,4 +52,16 @@ test('builds separate yt-dlp output arguments for video and M4A audio', () => {
   assert.ok(audio.includes('m4a'));
   assert.ok(!video.includes('--impersonate'));
   assert.ok(!audio.includes('--impersonate'));
+});
+
+test('stops an active downloader subprocess when the socket aborts its task', async () => {
+  const controller = new AbortController();
+  const running = runCommand(
+    process.execPath,
+    ['-e', 'setTimeout(() => {}, 10000)'],
+    { timeoutMs: 15000, signal: controller.signal }
+  );
+
+  setTimeout(() => controller.abort(new Error('connection closed')), 100);
+  await assert.rejects(running, /connection closed/);
 });
