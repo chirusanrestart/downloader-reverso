@@ -1,6 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDownloadTask, buildYtDlpArgs } from '../src/agent.mjs';
+import { parseDownloadTask, buildYtDlpArgs, buildAgentSocketUrl } from '../src/agent.mjs';
+
+test('builds a secure WebSocket endpoint from the public API address', () => {
+  assert.equal(
+    buildAgentSocketUrl('https://melissa-api-server.hostless.app'),
+    'wss://melissa-api-server.hostless.app/download-agent/connect'
+  );
+});
+
+test('keeps local HTTP API addresses usable for development', () => {
+  assert.equal(
+    buildAgentSocketUrl('http://127.0.0.1:8000/'),
+    'ws://127.0.0.1:8000/download-agent/connect'
+  );
+});
+
+test('rejects unsupported API URL protocols', () => {
+  assert.throws(() => buildAgentSocketUrl('ftp://example.com'), /HTTP/);
+});
 
 test('accepts only reverse-download tasks with a supported YouTube URL', () => {
   const task = parseDownloadTask({
