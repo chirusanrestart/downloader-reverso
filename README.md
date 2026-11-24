@@ -57,6 +57,6 @@ Não publique o `.env` nem coloque o segredo no GitHub.
 - Aceita somente URLs HTTPS de domínios oficiais do YouTube.
 - Modos suportados: `video` (MP4 combinado quando disponível) e `audio` (M4A/AAC).
 - Limite de arquivo: 500 MiB.
-- O agente tenta novamente com impersonação Chrome se a primeira execução falhar.
+- O agente executa yt-dlp sem impersonação, usando a conexão normal do Termux/A10s.
 - O endpoint do relay e o polling do agente exigem o segredo compartilhado.
 - Use somente conteúdo que você tenha autorização para baixar.
