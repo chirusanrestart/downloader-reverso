@@ -1,0 +1,14 @@
+{
+  "name": "downloader-reverso",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Agente Termux para fallback de downloads do YouTube via túnel reverso",
+  "scripts": {
+    "start": "node --env-file=.env src/agent.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
